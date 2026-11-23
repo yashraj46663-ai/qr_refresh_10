@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Auto-Refreshing QR Code</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+    .card { text-align: center; padding: 24px; border: 2px solid #000; border-radius: 12px; max-width: 360px; width: 100%; box-sizing: border-box; }
+    #qrcode { margin: 20px auto; display: inline-block; }
+    .timer { font-size: 1.1rem; font-weight: 600; }
+    .url { font-size: .75rem; color: #555; word-break: break-all; margin-top: 12px; }
+    .ok { color: #0a7a2f; } .bad { color: #b00020; }
+    .hidden { display: none; }
+    code { word-break: break-all; }
+  </style>
+</head>
+<body>
+
+  <!-- VIEW 1: the QR generator -->
+  <div class="card" id="generatorView">
+    <h2>QR Code Refresher</h2>
+    <div id="qrcode"></div>
+    <div class="timer">Refreshing in <span id="countdown">10</span>s</div>
+  </div>
+
+  <!-- VIEW 2: the page people land on after scanning -->
+  <div class="card hidden" id="landingView">
+    <h2 id="landingTitle"></h2>
+    <p id="landingMsg"></p>
+    <p>Token: <code id="landingToken"></code></p>
+  </div>
+
+  <script>
+    // ====== CONFIG ======
+    // The page the QR code sends people to. Leave empty to use THIS page
+    // (it doubles as the landing page). Or set e.g. "https://yourwebsite.com/verify"
+    const TARGET_URL = "";
+    const REFRESH_SECONDS = 10;
+    const TOKEN_VALID_SECONDS = 15; // landing page treats older scans as expired (demo only)
+    // ====================
+
+    const params = new URLSearchParams(location.search);
+
+    if (params.has("token")) {
+      showLanding();
+    } else {
+      startGenerator();
+    }
+
+    function showLanding() {
+      document.getElementById("generatorView").classList.add("hidden");
+      document.getElementById("landingView").classList.remove("hidden");
+
+      const token = params.get("token");
+      const issuedAt = Number(params.get("t"));
+      const age = (Date.now() - issuedAt) / 1000;
+      const valid = issuedAt && age <= TOKEN_VALID_SECONDS;
+
+      const title = document.getElementById("landingTitle");
+      title.textContent = valid ? "✅ Scan successful" : "⛔ QR code expired";
+      title.className = valid ? "ok" : "bad";
+      document.getElementById("landingMsg").textContent = valid
+        ? "Welcome! You were redirected here by scanning the QR code."
+        : "This code is too old. Scan the current one on the screen.";
+      document.getElementById("landingToken").textContent = token;
+      // For production: send `token` to your backend and validate it there.
+    }
+
+    function startGenerator() {
+      let timeLeft = REFRESH_SECONDS;
+      const qrContainer = document.getElementById("qrcode");
+      const countdownEl = document.getElementById("countdown");
+
+      function generateToken() {
+        return crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).substring(2) + Date.now().toString(36);
+      }
+
+      function buildUrl() {
+        const base = TARGET_URL || (location.origin + location.pathname);
+        const url = new URL(base, location.href);
+        url.searchParams.set("token", generateToken());
+        url.searchParams.set("t", Date.now());
+        return url.toString();
+      }
+
+      function generateQR() {
+        const url = buildUrl();
+        qrContainer.innerHTML = "";
+        new QRCode(qrContainer, { text: url, width: 220, height: 220 });
+      }
+
+      generateQR();
+
+      setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+          generateQR();
+          timeLeft = REFRESH_SECONDS;
+        }
+        countdownEl.textContent = timeLeft;
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
